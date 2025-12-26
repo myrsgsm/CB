@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Create Bill - Royal Sherwani</title>
+    
+    <script>
+        if (!window.crypto || !window.crypto.subtle || !window.crypto.getRandomValues) {
+            const fakeCrypto = {
+                getRandomValues: function(array) {
+                    for (let i = 0; i < array.length; i++) array[i] = Math.floor(Math.random() * 256);
+                    return array;
+                },
+                subtle: {
+                    digest: function(algo, data) { return Promise.resolve(new Uint8Array(32)); }
+                }
+            };
+            try { Object.defineProperty(window, 'crypto', { value: fakeCrypto, writable: true }); } 
+            catch(e) { window.crypto = fakeCrypto; }
+        }
+    </script>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700&family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        :root { --gold: #D4AF37; --bg: #050505; --card: #141414; --text: #E0E0E0; --green: #4CAF50; --red: #FF5252; --blue: #2196F3; }
+        
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; outline: none; }
+        body { background-color: var(--bg); color: var(--text); font-family: 'Inter', sans-serif; margin: 0; padding: 0; padding-bottom: 80px; overscroll-behavior-x: none; }
+        
+        /* LOGIN SCREEN & CONSOLE */
+        #login-screen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 2000; display: flex; flex-direction: column; justify-content: center; align-items: center; }
+        .inp-login { width: 100%; padding: 12px; background: #222; border: 1px solid #444; color: white; border-radius: 6px; margin-bottom: 10px; font-size: 16px; }
+        .btn-act { width: 100%; padding: 12px; background: var(--gold); border: none; font-weight: bold; border-radius: 6px; cursor: pointer; color: #000; font-family: 'Cinzel', serif; font-size: 16px; }
+        
+        #debug-console {
+            background: #000; border: 1px solid #333; color: #0f0;
+            font-family: monospace; font-size: 10px; padding: 10px;
+            margin-top: 15px; width: 90%; max-width: 300px; height: 120px;
+            overflow-y: auto; border-radius: 5px; text-align: left;
+            display: block;
+        }
+        .log-err { color: #ff5555; font-weight: bold; border-bottom: 1px solid #550000; }
+        .log-warn { color: #ffaa00; }
+        .log-ok { color: #00ff00; }
+
+        input, select, button, textarea { -webkit-appearance: none; -moz-appearance: none; appearance: none; font-family: 'Inter', sans-serif; }
+
+        /* HEADER */
+        .header { background: #111; padding: 15px; border-bottom: 2px solid var(--gold); display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 50; }
+        .brand-container { display: flex; align-items: center; gap: 10px; }
+        .brand { font-family: 'Cinzel'; color: var(--gold); font-size: 18px; }
+        
+        .status-dot { width: 10px; height: 10px; border-radius: 50%; background-color: #333; box-shadow: 0 0 5px rgba(0,0,0,0.5); transition: background-color 0.3s ease; }
+        .status-dot.online { background-color: var(--green); box-shadow: 0 0 8px var(--green); }
+        .status-dot.offline { background-color: var(--red); box-shadow: 0 0 8px var(--red); }
+        .status-dot.busy { background-color: #FFC107; box-shadow: 0 0 8px #FFC107; animation: pulse 1s infinite; }
+
+        .header-actions { display: flex; gap: 8px; }
+        .btn-icon { background: #333; border: 1px solid #444; color: white; padding: 8px 12px; border-radius: 6px; font-size: 12px; cursor: pointer; display: flex; align-items: center; gap: 5px; font-weight: bold; touch-action: manipulation; }
+
+        .container { padding: 15px; max-width: 600px; margin: 0 auto; }
+        .card { background: var(--card); padding: 15px; border-radius: 8px; border: 1px solid #333; margin-bottom: 15px; }
+        .card-title { color: var(--gold); font-size: 12px; font-weight: bold; text-transform: uppercase; margin-bottom: 10px; letter-spacing: 1px; }
+
+        .inp { width: 100%; background: #2A2A2A; border: 1px solid #444; color: white; padding: 12px; border-radius: 6px; font-size: 16px; margin-bottom: 10px; }
+        select.inp { background-image: url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23D4AF37%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E"); background-repeat: no-repeat; background-position: right .7em top 50%; background-size: .65em auto; padding-right: 1.5em; }
+
+        .btn-main { width: 100%; background: linear-gradient(135deg, var(--gold), #AA8C2C); color: black; font-weight: 900; padding: 15px; border: none; border-radius: 6px; font-size: 16px; cursor: pointer; margin-top: 10px; }
+
+        .phone-group { display: flex; gap: 5px; margin-bottom: 10px; }
+        .btn-add-phone { background: #333; border: 1px solid var(--green); color: var(--green); width: 45px; font-size: 20px; font-weight: bold; border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+        .btn-rem-phone { background: #333; border: 1px solid var(--red); color: var(--red); width: 45px; font-size: 16px; border-radius: 6px; cursor: pointer; }
+
+        .rm-box { display: flex; align-items: center; gap: 10px; background: rgba(212, 175, 55, 0.1); border: 1px solid var(--gold); padding: 15px; border-radius: 8px; margin: 10px 0; cursor: pointer; }
+        .rm-chk { width: 25px; height: 25px; accent-color: var(--gold); cursor: pointer; -webkit-appearance: checkbox; }
+        .rm-lbl { font-weight: 900; color: var(--gold); font-size: 16px; cursor: pointer; }
+
+        .scan-box { display: none; background: #222; padding: 10px; border-radius: 8px; margin-bottom: 15px; border: 1px dashed #555; }
+        .scan-row { display: flex; gap: 5px; }
+        .linked-list { margin-top: 10px; }
+        .linked-tag { background: var(--blue); color: white; padding: 5px 10px; border-radius: 4px; font-size: 12px; display: inline-flex; align-items: center; gap: 5px; margin-right: 5px; margin-bottom: 5px; }
+
+        .item-row-ui { display: flex; gap: 5px; margin-bottom: 10px; align-items: start; background: #252525; padding: 10px; border-radius: 6px; position: relative; }
+        .btn-del { background: #ff4444; color: white; border: none; width: 25px; height: 25px; border-radius: 50%; font-weight: bold; position: absolute; top: -5px; right: -5px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+        .acc-grid { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+        .acc-tag { background: #333; padding: 6px 10px; border-radius: 6px; font-size: 12px; display: flex; align-items: center; gap: 8px; border: 1px solid #444; cursor: pointer; }
+        .acc-chk { width: 18px; height: 18px; accent-color: var(--gold); cursor: pointer; -webkit-appearance: checkbox; }
+
+        .pent-options { width: 100%; display: none; background: #1a1a1a; padding: 8px; margin-top: 5px; border-radius: 6px; border: 1px dashed #555; }
+        .pent-opt-row { display: flex; gap: 10px; margin-top: 5px; }
+        .pent-lbl { display: flex; align-items: center; gap: 5px; font-size: 11px; color: #ccc; cursor: pointer; }
+        .pent-radio { accent-color: var(--gold); width: 16px; height: 16px; -webkit-appearance: radio; }
+
+        /* Z-INDEX FIXED TO 3000 TO BE OVER LOGIN */
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); z-index: 3000; justify-content: center; align-items: center; flex-direction: column; }
+        .modal-content { background: var(--card); width: 95%; max-width: 500px; padding: 20px; border-radius: 12px; border: 1px solid var(--gold); margin-bottom: 50px; }
+        #reader { width: 100%; border: 2px solid var(--gold); }
+
+        .meas-container { display: flex; gap: 15px; margin-top: 10px; }
+        .meas-col { flex: 1; }
+        .meas-col-title { color: var(--gold); font-weight: bold; text-align: center; border-bottom: 1px solid #333; padding-bottom: 5px; margin-bottom: 10px; font-size: 14px; }
+        .meas-field { margin-bottom: 8px; }
+        .meas-lbl { font-size: 11px; color: #888; margin-bottom: 2px; }
+        .meas-inp { width: 100%; background: #222; border: 1px solid #444; color: white; padding: 8px; border-radius: 4px; font-size: 16px; text-align: center; font-weight: bold; }
+
+        .reprint-box { text-align: center; }
+        .reprint-inp { width: 100%; padding: 15px; font-size: 20px; text-align: center; margin-bottom: 15px; border-radius: 8px; border: 1px solid var(--gold); background: #222; color: white; font-weight: bold; }
+
+        .loader { border: 3px solid #333; border-top: 3px solid var(--gold); border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin: 20px auto; display: none; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+
+    <div id="login-screen">
+        <h2 style="color:var(--gold); font-family:'Cinzel'; margin-bottom:20px; letter-spacing:2px;">ROYAL LOGIN</h2>
+        <div style="width:280px;">
+            <input type="email" id="login-email" class="inp-login" placeholder="Email">
+            <input type="password" id="login-pass" class="inp-login" placeholder="Password">
+            <button id="loginBtn" class="btn-act" onclick="handleLogin()">ENTER SYSTEM</button>
+            <div id="login-loader" class="loader" style="margin:10px auto; display:none;"></div>
+        </div>
+        <div id="debug-console">System Booting...<br></div>
+        
+        <button class="btn-icon" style="position:absolute; bottom:20px; right:20px; border-color:var(--gold); color:var(--gold);" onclick="requestKeyAccess()">
+            <i class="fas fa-key"></i>
+        </button>
+    </div>
+    <div id="app-container" style="display:none;">
+        <div class="header">
+            <div class="brand-container">
+                <div id="status-light" class="status-dot"></div>
+                <div class="brand">ROYAL BILLING</div>
+            </div>
+            <div class="header-actions">
+                <button class="btn-icon" onclick="openMeasModal()">📏 SIZE</button>
+                <button class="btn-icon" onclick="openReprintModal()">🖨️ REPRINT</button>
+                <button class="btn-icon" onclick="resetForm()">↺ NEW</button>
+            </div>
+        </div>
+
+        <div class="container">
+            <div class="card">
+                <div class="card-title">Book & Customer</div>
+                <select id="book-select" class="inp" onchange="handleBookChange(); saveState()"><option value="">Loading...</option></select>
+                <div style="font-size:12px; text-align:right; color:var(--green); margin-bottom:10px;">Next Bill: <span id="next-serial">--</span></div>
+                
+                <input type="text" id="cust-name" class="inp" placeholder="Customer Name" oninput="saveState()">
+                <div id="phone-container"></div>
+                
+                <label style="color:#888; font-size:12px;">Delivery Date:</label>
+                <input type="date" id="del-date" class="inp" onchange="saveState()">
+
+                <div class="rm-box" onclick="toggleRM()">
+                    <input type="checkbox" id="rm-chk" class="rm-chk" onchange="toggleRM(); saveState()">
+                    <label for="rm-chk" class="rm-lbl">RM (HAND TO HAND)</label>
+                </div>
+
+                <div id="scan-box" class="scan-box">
+                    <div style="font-size:12px;color:#aaa;margin-bottom:5px;">ATTACH ID'S (Required for RM)</div>
+                    <div class="scan-row">
+                        <input type="text" id="link-id-inp" class="inp" style="margin:0" placeholder="Enter/Scan ID">
+                        <button class="btn-icon" onclick="openScanner()">📷</button>
+                        <button class="btn-icon" style="background:var(--gold); color:black;" onclick="fetchAndLinkItem()">+</button>
+                    </div>
+                    <div id="linked-list" class="linked-list"></div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">Items</div>
+                <div id="items-container"></div>
+                <button class="btn-icon" style="width:100%; justify-content:center; padding:12px; margin-top:10px;" onclick="addItemRow()">+ ADD ITEM</button>
+            </div>
+
+            <div class="card">
+                <div class="card-title">Payment</div>
+                <div style="display:flex; justify-content:space-between; margin-bottom:10px; font-weight:bold; font-size:18px;">
+                    <span>Total: ₹<span id="ui-total" style="color:var(--gold)">0</span></span>
+                    <span>Bal: ₹<span id="ui-bal" style="color:var(--red)">0</span></span>
+                </div>
+                <input type="number" id="inp-paid" class="inp" placeholder="Advance Amount" oninput="calculate(); saveState()">
+                <select id="pay-mode" class="inp" onchange="saveState()"><option>CASH</option><option>UPI</option></select>
+            </div>
+
+            <button class="btn-main" onclick="submitBill()">GENERATE & PRINT BILL</button>
+            <div id="loader" class="loader"></div>
+        </div>
+    </div>
+
+    <div id="keys-modal" class="modal">
+        <div class="modal-content">
+            <h3 style="color:var(--gold); text-align:center;">SUPABASE KEYS</h3>
+            <p style="font-size:11px; color:#888; margin-bottom:10px;">Keys will be stored on this device only.</p>
+            <input type="text" id="k-url" class="inp-login" placeholder="Supabase URL">
+            <input type="text" id="k-key" class="inp-login" placeholder="Anon Key">
+            <button class="btn-act" onclick="saveKeys()">SAVE & REBOOT</button>
+            <button class="btn-act" style="background:#333;color:#888;margin-top:5px;" onclick="closeModal()">CANCEL</button>
+        </div>
+    </div>
+
+    <div id="meas-modal" class="modal">
+        <div class="modal-content">
+            <h3 style="color:var(--gold); text-align:center; margin-top:0;">MEASUREMENTS</h3>
+            <div class="meas-container">
+                <div class="meas-col" style="border-right:1px solid #333; padding-right:10px;"><div class="meas-col-title">LOWER</div><div id="meas-left"></div></div>
+                <div class="meas-col" style="padding-left:10px;"><div class="meas-col-title">UPPER</div><div id="meas-right"></div></div>
+            </div>
+            <button class="btn-main" onclick="closeModal()">DONE</button>
+        </div>
+    </div>
+
+    <div id="scanner-modal" class="modal">
+        <div class="modal-content" style="text-align:center">
+            <h3>SCAN BARCODE</h3>
+            <div id="reader"></div>
+            <button class="btn-main" onclick="stopScanner()">CLOSE</button>
+        </div>
+    </div>
+
+    <div id="reprint-modal" class="modal">
+        <div class="modal-content reprint-box">
+            <h3 style="color:var(--gold);">REPRINT OLD BILL</h3>
+            <input type="number" id="reprint-id" class="reprint-inp" placeholder="Enter Bill Number">
+            <button class="btn-main" onclick="fetchAndPrint()">FETCH & PRINT</button>
+            <button class="btn-icon" style="width:100%; justify-content:center; margin-top:10px; background:none; border:none;" onclick="closeModal()">CANCEL</button>
+        </div>
+    </div>
+
+    <script>
+        function log(msg, type='info') {
+            const consoleBox = document.getElementById('debug-console');
+            const colorClass = type === 'error' ? 'log-err' : (type === 'success' ? 'log-ok' : 'log-warn');
+            const time = new Date().toLocaleTimeString();
+            consoleBox.innerHTML += `<div class="${colorClass}">[${time}] ${msg}</div>`;
+            consoleBox.scrollTop = consoleBox.scrollHeight;
+        }
+
+        // --- DYNAMIC STORAGE KEYS ---
+        let SUPABASE_URL = localStorage.getItem('RS_SB_URL') || '';
+        let SUPABASE_KEY = localStorage.getItem('RS_SB_KEY') || '';
+
+        function requestKeyAccess() {
+            const code = prompt("Enter Access Code:");
+            if(code === "5563990") {
+                document.getElementById('k-url').value = SUPABASE_URL;
+                document.getElementById('k-key').value = SUPABASE_KEY;
+                document.getElementById('keys-modal').style.display = 'flex';
+            } else {
+                alert("Unauthorized Access!");
+            }
+        }
+
+        function saveKeys() {
+            const u = document.getElementById('k-url').value.trim();
+            const k = document.getElementById('k-key').value.trim();
+            if(u && k) {
+                localStorage.setItem('RS_SB_URL', u);
+                localStorage.setItem('RS_SB_KEY', k);
+                alert("Keys Saved. App will reload.");
+                location.reload();
+            } else {
+                alert("Please fill both fields.");
+            }
+        }
+
+        var billClient = null;
+        var retryCount = 0;
+        
+        const ACCESSORIES = ['Pagdi', 'Kalangi', 'Stall', 'Mala', 'Zuti', 'Pent', 'Pajami'];
+        const PENT_OPTIONS = ['White', 'Black', 'Same'];
+        const MEAS_LOWER = ['Kamar', 'Hips', 'Thai', 'Pindli', 'Mori', 'Length'];
+        const MEAS_UPPER = ['Pagdi Size', 'Neck', 'Chest', 'Cross Back', 'Pet', 'Baju', 'Length', 'Upper Len', 'Inner Len'];
+
+        let currentBook=null, measurements={}, rmLinkedItems=[];
+        let html5QrCode = null;
+
+        const safeStorage = {
+            getItem: (k) => { try { return localStorage.getItem(k); } catch(e) { return null; } },
+            setItem: (k,v) => { try { localStorage.setItem(k,v); } catch(e) {} },
+            removeItem: (k) => { try { localStorage.removeItem(k); } catch(e) {} }
+        };
+
+        function initApp() {
+            log("System Booting...");
+            
+            if(!SUPABASE_URL || !SUPABASE_KEY) {
+                log("⚠️ Database keys missing. Tap Key Icon to set.", 'error');
+                return;
+            }
+
+            var checkInterval = setInterval(function() {
+                if (typeof window.supabase !== 'undefined') {
+                    clearInterval(checkInterval);
+                    try {
+                        billClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+                            auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
+                        });
+                        log("✅ Connected (Private Mode)");
+                        checkSavedLogin();
+                    } catch (e) { log("❌ Init Fail: " + e.message, 'error'); }
+                } else {
+                    retryCount++;
+                    if (retryCount % 2 === 0) log("Loading Lib... (" + retryCount + ")");
+                    if (retryCount > 40) { 
+                        clearInterval(checkInterval); 
+                        log("❌ Library Error.", 'error'); 
+                    }
+                }
+            }, 500);
+        }
+
+        window.onload = initApp;
+
+        function checkSavedLogin() {
+            const e = safeStorage.getItem('royal_email');
+            const p = safeStorage.getItem('royal_pass');
+            if(e && p) {
+                log("♻️ Auto-Logging in...");
+                document.getElementById('login-email').value = e;
+                document.getElementById('login-pass').value = p;
+                handleLogin();
+            } else {
+                log("ℹ️ Please Login.");
+            }
+        }
+
+        async function handleLogin() {
+            const e = document.getElementById('login-email').value.trim();
+            const p = document.getElementById('login-pass').value.trim();
+            if(!e || !p) { log("Enter Credentials", 'warn'); return; }
+            if(!billClient) { log("Setup Database Keys First!", 'error'); return; }
+
+            document.getElementById('login-loader').style.display = 'block';
+            document.getElementById('loginBtn').disabled = true;
+            log("Authenticating...");
+
+            const { error } = await billClient.auth.signInWithPassword({ email: e, password: p });
+            
+            document.getElementById('login-loader').style.display = 'none';
+            document.getElementById('loginBtn').disabled = false;
+
+            if(error) {
+                log("❌ " + error.message, 'error');
+            } else {
+                log("✅ Login Success!");
+                safeStorage.setItem('royal_email', e);
+                safeStorage.setItem('royal_pass', p);
+                
+                document.getElementById('login-screen').style.display = 'none';
+                document.getElementById('app-container').style.display = 'block';
+                
+                await loadBooks();
+                renderMeasFields();
+                
+                if(safeStorage.getItem('bill_state')) { loadState(); } 
+                else { addPhoneField(); addItemRow(); }
+
+                window.history.pushState({modal:false}, null, "");
+                window.onpopstate = () => { closeModal(); };
+                
+                window.addEventListener('online', () => setStatus('online'));
+                window.addEventListener('offline', () => setStatus('offline'));
+                setStatus(navigator.onLine ? 'online' : 'offline');
+            }
+        }
+
+        function saveState() {
+            const state = {
+                bookId: document.getElementById('book-select').value,
+                custName: document.getElementById('cust-name').value,
+                phones: Array.from(document.querySelectorAll('.phone-inp')).map(i => i.value),
+                delDate: document.getElementById('del-date').value,
+                isRM: document.getElementById('rm-chk').checked,
+                paid: document.getElementById('inp-paid').value,
+                payMode: document.getElementById('pay-mode').value,
+                measurements: measurements,
+                rmLinkedItems: rmLinkedItems,
+                items: []
+            };
+            document.querySelectorAll('.item-row-ui').forEach(r => {
+                const desc = r.querySelector('.row-desc').value;
+                const price = r.querySelector('.row-price').value;
+                const rowId = r.dataset.id;
+                let acc = [];
+                let pentOpt = null;
+                r.querySelectorAll('.acc-chk:checked').forEach(c => {
+                    acc.push(c.value);
+                    if(c.value === 'Pent') {
+                        const po = r.querySelector(`input[name="pent-opt-${rowId}"]:checked`);
+                        if(po) pentOpt = po.value;
+                    }
+                });
+                state.items.push({desc, price, acc, pentOpt});
+            });
+            safeStorage.setItem('bill_state', JSON.stringify(state));
+        }
+
+        function loadState() {
+            try {
+                const saved = safeStorage.getItem('bill_state');
+                if(!saved) return;
+                const state = JSON.parse(saved);
+                if(state.bookId) document.getElementById('book-select').value = state.bookId;
+                setTimeout(handleBookChange, 500); 
+                document.getElementById('cust-name').value = state.custName || '';
+                document.getElementById('del-date').value = state.delDate || '';
+                document.getElementById('rm-chk').checked = state.isRM || false;
+                toggleRM(); 
+                document.getElementById('inp-paid').value = state.paid || '';
+                document.getElementById('pay-mode').value = state.payMode || 'CASH';
+                const pc = document.getElementById('phone-container');
+                pc.innerHTML = '';
+                if(state.phones && state.phones.length > 0) state.phones.forEach(p => addPhoneField(p)); else addPhoneField();
+                measurements = state.measurements || {};
+                for (const [key, val] of Object.entries(measurements)) { const el = document.getElementById('m-'+key.replace(/\s/g,'')); if(el) el.value = val; }
+                rmLinkedItems = state.rmLinkedItems || [];
+                renderLinkedIds();
+                const ic = document.getElementById('items-container');
+                ic.innerHTML = '';
+                if(state.items && state.items.length > 0) state.items.forEach(i => addItemRow(i.desc, i.price, i.acc, i.pentOpt)); else addItemRow();
+                calculate();
+            } catch(e) { addPhoneField(); addItemRow(); }
+        }
+
+        function resetForm() { if(confirm("Start New Bill?")) { safeStorage.removeItem('bill_state'); location.reload(); } }
+
+        function setStatus(status) {
+            const el = document.getElementById('status-light');
+            if(el) el.className = 'status-dot ' + status;
+        }
+
+        function toggleRM() {
+            const isChecked = document.getElementById('rm-chk').checked;
+            const dateInp = document.getElementById('del-date');
+            const scanBox = document.getElementById('scan-box');
+            if(isChecked) { dateInp.disabled = true; scanBox.style.display = 'block'; } 
+            else { dateInp.disabled = false; scanBox.style.display = 'none'; }
+        }
+
+        function addItemRow(desc='', price='', checkedAcc=[], pentOpt=null) {
+            const div = document.createElement('div'); div.className='item-row-ui';
+            const rowId = Date.now() + Math.random().toString(36).substr(2, 5);
+            div.dataset.id = rowId;
+            let chkHtml=''; 
+            ACCESSORIES.forEach(a => {
+                const isChecked = checkedAcc.includes(a) ? 'checked' : '';
+                if (a === 'Pent') {
+                    chkHtml += `<div style="width:100%"><div class="acc-tag"><input type="checkbox" class="acc-chk pent-main-chk" value="${a}" ${isChecked} onchange="togglePentUI('${rowId}', this); saveState()"> ${a}</div><div id="pent-box-${rowId}" class="pent-options" style="display:${isChecked?'block':'none'}"><div class="pent-opt-row">${PENT_OPTIONS.map(opt => `<label class="pent-lbl"><input type="radio" class="pent-radio" name="pent-opt-${rowId}" value="${opt}" ${pentOpt===opt?'checked':''} onchange="saveState()"> ${opt} Pent</label>`).join('')}</div></div></div>`;
+                } else { chkHtml += `<label class="acc-tag"><input type="checkbox" class="acc-chk" value="${a}" ${isChecked} onchange="saveState()"> ${a}</label>`; }
+            });
+            div.innerHTML = `<button class="btn-del" onclick="this.parentElement.remove();calculate();saveState()">X</button><div style="flex:1"><input type="text" class="inp row-desc" placeholder="Item Name" value="${desc}" oninput="saveState()"><div class="acc-grid">${chkHtml}</div></div><input type="number" class="inp row-price" placeholder="₹" style="width:80px" value="${price}" oninput="calculate();saveState()">`;
+            document.getElementById('items-container').appendChild(div);
+        }
+
+        function togglePentUI(rowId, checkbox) {
+            const box = document.getElementById(`pent-box-${rowId}`);
+            box.style.display = checkbox.checked ? 'block' : 'none';
+        }
+
+        function calculate() {
+            let tot=0; document.querySelectorAll('.row-price').forEach(i=>tot+=parseFloat(i.value)||0);
+            const pd=parseFloat(document.getElementById('inp-paid').value)||0;
+            document.getElementById('ui-total').innerText=tot; document.getElementById('ui-bal').innerText=tot-pd;
+            return {t:tot, p:pd, b:tot-pd};
+        }
+
+        function renderMeasFields() {
+            const left = document.getElementById('meas-left'); const right = document.getElementById('meas-right');
+            if(left.innerHTML === '') {
+                MEAS_LOWER.forEach(f => left.innerHTML += `<div class="meas-field"><div class="meas-lbl">${f}</div><input type="tel" id="m-${f.replace(/\s/g,'')}" class="meas-inp" oninput="measurements['${f}']=this.value; saveState()"></div>`);
+                MEAS_UPPER.forEach(f => right.innerHTML += `<div class="meas-field"><div class="meas-lbl">${f}</div><input type="tel" id="m-${f.replace(/\s/g,'')}" class="meas-inp" oninput="measurements['${f}']=this.value; saveState()"></div>`);
+            }
+        }
+
+        function addPhoneField(value = '') {
+            const container = document.getElementById('phone-container');
+            const div = document.createElement('div');
+            div.className = 'phone-group';
+            div.innerHTML = `
+                <input type="tel" class="inp phone-inp" placeholder="Phone (10 digits)" maxlength="10" value="${value}" oninput="saveState()">
+                ${container.children.length === 0 ? `<button class="btn-add-phone" onclick="addPhoneField(); saveState()">+</button>` : `<button class="btn-rem-phone" onclick="this.parentElement.remove(); saveState()">✕</button>`}
+            `;
+            container.appendChild(div);
+        }
+
+        async function loadBooks() {
+            const { data, error } = await billClient.from('bill_books').select('*').eq('is_active', true);
+            const sel = document.getElementById('book-select');
+            sel.innerHTML = '<option value="">Select Book</option>';
+            if(data) data.forEach(b => {
+                const opt = document.createElement('option'); opt.value=b.id; opt.text=`${b.salesman_name} (${b.start_serial}-${b.end_serial})`; opt.dataset.serial=b.current_serial;
+                sel.appendChild(opt);
+            });
+        }
+        function handleBookChange() {
+            const opt = document.getElementById('book-select').selectedOptions[0];
+            if(opt.value) { currentBook={id:opt.value, next:parseInt(opt.dataset.serial)}; document.getElementById('next-serial').innerText="#"+currentBook.next; }
+        }
+
+        async function submitBill() {
+            if(!currentBook) return alert("Select Book");
+            const name=document.getElementById('cust-name').value.trim();
+            if(!name) return alert("Enter Customer Name");
+            const calcs = calculate();
+            if(calcs.t === 0) return alert("Add Items with Price");
+            const isRM = document.getElementById('rm-chk').checked;
+            const delDate = isRM ? "RM" : document.getElementById('del-date').value;
+            if(!isRM && !delDate) return alert("Please Select Delivery Date!");
+            if(isRM) {
+                if(rmLinkedItems.length === 0) return alert("For RM Bill, attach Stock ID.");
+                if(calcs.b > 0) return alert("For RM Bill, Full Payment required.");
+            }
+            document.getElementById('loader').style.display='block';
+            setStatus('busy');
+            let items=[], printItems = [];
+            document.querySelectorAll('.item-row-ui').forEach(r=>{
+                let d=r.querySelector('.row-desc').value.trim();
+                const p=parseFloat(r.querySelector('.row-price').value)||0;
+                const rowId = r.dataset.id;
+                let acc=[]; let pentOpt = null;
+                r.querySelectorAll('.acc-chk:checked').forEach(c => {
+                    let val = c.value;
+                    if (val === 'Pent') { const po = r.querySelector(`input[name="pent-opt-${rowId}"]:checked`); if(po) pentOpt = po.value; }
+                    acc.push(val);
+                });
+                if(d && p) { 
+                    items.push({desc: d + (acc.length ? ` [${acc.join(', ')}]` : ''), price:p});
+                    printItems.push({ desc: d, sub: acc.length ? `(${acc.join(', ')})` : '', price: p });
+                }
+            });
+            if(Object.keys(measurements).length > 0) items.push({type:'measurements', data:measurements});
+            const bNo = currentBook.next;
+            let phones = []; document.querySelectorAll('.phone-inp').forEach(i => { if(i.value) phones.push(i.value) });
+            const status = isRM ? 'DELIVERED' : (calcs.b<=0?'FULL_PAID':'PARTIAL');
+            const {error} = await billClient.from('bills').insert([{
+                bill_number: bNo, book_id: currentBook.id, customer_name: name, customer_phone: phones.join(', '),
+                items_json: items, total_amount: calcs.t, received_amount: calcs.p, pending_amount: calcs.b,
+                status: status, delivery_date: delDate, payment_mode: document.getElementById('pay-mode').value
+            }]);
+            if(error) { document.getElementById('loader').style.display='none'; setStatus('offline'); return alert(error.message); }
+            if(calcs.p>0) await billClient.from('payments').insert([{bill_number:bNo, amount:calcs.p, mode:document.getElementById('pay-mode').value, type:'ADVANCE'}]);
+            await billClient.from('bill_books').update({current_serial: bNo+1}).eq('id', currentBook.id);
+            if(isRM && rmLinkedItems.length > 0) {
+                await billClient.from('items').update({ current_location: 'SOLD_OUT', bill_number: bNo }).in('id', rmLinkedItems);
+                await billClient.from('logs').insert(rmLinkedItems.map(id => ({ item_id: id, action_type: 'SOLD_OUT_BILL_' + bNo })));
+            }
+            safeStorage.removeItem('bill_state');
+            openPrintModule({
+                name: name, phone: phones.join(', '), billNo: bNo,
+                date: new Date().toLocaleDateString('en-GB'),
+                time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+                delivery: delDate, items: printItems, total: calcs.t, received: calcs.p, balance: calcs.b
+            });
+            document.getElementById('loader').style.display='none'; setStatus('online');
+            setTimeout(() => location.reload(), 1000);
+        }
+
+        async function fetchAndLinkItem() {
+            const id = document.getElementById('link-id-inp').value.trim();
+            if(!id) return;
+            if(rmLinkedItems.includes(id)) return alert("ID already added");
+            const { data: item, error } = await billClient.from('items').select('*, designs(name)').eq('id', id).single();
+            if(error || !item) return alert("Item Not Found");
+            if(item.bill_number) return alert("Item already billed!");
+            rmLinkedItems.push(id); renderLinkedIds(); saveState();
+            const name = item.designs?.name || 'Unknown';
+            const firstRow = document.querySelector('.row-desc');
+            if(firstRow && !firstRow.value) { firstRow.value = name; saveState(); } else addItemRow(name, '', []);
+            document.getElementById('link-id-inp').value = '';
+        }
+
+        function renderLinkedIds() {
+            const cont = document.getElementById('linked-list'); cont.innerHTML = '';
+            rmLinkedItems.forEach((id, idx) => { cont.innerHTML += `<div class="linked-tag">${id} <span style="cursor:pointer;margin-left:5px;" onclick="removeLinkedId(${idx})">✕</span></div>`; });
+        }
+        function removeLinkedId(idx) { rmLinkedItems.splice(idx, 1); renderLinkedIds(); saveState(); }
+        function openMeasModal() { document.getElementById('meas-modal').style.display = 'flex'; }
+        function openReprintModal() { document.getElementById('reprint-modal').style.display = 'flex'; }
+        function closeModal() { document.querySelectorAll('.modal').forEach(m => m.style.display = 'none'); }
+        function openScanner() {
+            document.getElementById('scanner-modal').style.display='flex';
+            html5QrCode = new Html5Qrcode("reader");
+            html5QrCode.start({ facingMode: "environment" }, { fps: 10, qrbox: 250 }, async (txt) => {
+                stopScanner(); document.getElementById('link-id-inp').value = txt; fetchAndLinkItem();
+            });
+        }
+        function stopScanner() { if(html5QrCode) html5QrCode.stop().catch(()=>{}); closeModal(); }
+        async function fetchAndPrint() {
+            const id = document.getElementById('reprint-id').value; if(!id) return alert("Enter Bill No");
+            const { data: bill } = await billClient.from('bills').select('*').eq('bill_number', id).single();
+            if(!bill) return alert("Bill Not Found");
+            let printItems = [];
+            if(bill.items_json) {
+                bill.items_json.forEach(i => {
+                    if(i.type !== 'measurements') {
+                        let d = i.desc, s = '';
+                        if(d.includes('[')) { const parts=d.split('['); d=parts[0].trim(); s=parts[1].replace(']',''); }
+                        printItems.push({ desc: d, sub: `(${s})`, price: i.price });
+                    }
+                });
+            }
+            openPrintModule({
+                name: bill.customer_name, phone: bill.customer_phone, billNo: bill.bill_number,
+                date: new Date(bill.created_at).toLocaleDateString('en-GB'),
+                time: new Date(bill.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+                delivery: bill.delivery_date, items: printItems, total: bill.total_amount, received: bill.received_amount, balance: bill.pending_amount
+            });
+            closeModal();
+        }
+        function openPrintModule(data) { safeStorage.setItem('royal_print_queue', JSON.stringify(data)); window.open('print_template.html', '_blank'); }
+    </script>
+</body>
+</html>
